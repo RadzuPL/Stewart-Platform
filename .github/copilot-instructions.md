@@ -1,51 +1,52 @@
 # Instrukcje dla Copilota – Stewart Platform
 
-## Ogólne zasady
+## Rola pliku
+Ten plik opisuje sposób współpracy z asystentem, styl zmian i oczekiwany format kodu.
+Dane techniczne projektu, pinout, komendy, stan funkcji i roadmapa powinny być utrzymywane w `README.md`.
+
+## Ogólne zasady pracy
 - Projekt embedded: PlatformIO + C++ na ESP32.
-- Nie zmieniaj pinów (są połączone na stałe w gotowym układzie), nazw ID serw (11-16) bez wyraźnej prośby.
-- Zanim zaproponujesz refaktor, opisz problem który rozwiązujesz.
-- Preferuj małe zmiany zamiast pełnego przepisywania.
-- Kod musi działać na rzeczywistym sprzęcie.
+- Preferuj małe, lokalne zmiany zamiast pełnego przepisywania plików.
+- Zanim zaproponujesz refaktor, najpierw opisz problem, który ma zostać rozwiązany.
+- Kod ma działać na rzeczywistym sprzęcie, nie tylko kompilować się teoretycznie.
+- Nie zmieniaj pinów, zakresów ID serw ani parametrów interfejsów bez wyraźnej prośby.
+- Nie usuwaj istniejących komentarzy technicznych bez wyraźnej prośby.
+- Jeżeli jakaś komenda lub funkcja zależy od konkretnego firmware serwa, zaznacz to w opisie i w komentarzu kodu.
 
-## Konfiguracja sprzętu (nie zmieniać bez zgody)
-- **ESP32**, komunikacja z serwami: Serial2 (UART2) 1 Mbps, TX=GPIO19, RX=GPIO18
-- **Debug/komendy**: Serial (UART0) 115200bps (GPIO1=TX, GPIO3=RX)
-- **Master UART**: GPIO16/17 — do implementacji
-- **OLED**: I2C SDA=GPIO21, SCL=GPIO22
-- **LED RGB**: WS2812 GPIO23
-- **Serwa**: ID 11–16, biblioteka SCSCL
+## Styl propozycji zmian
+- Generuj czysty, pełny kod.
+- Nie używaj znaczników typu `...existing code...`.
+- Jeśli zmiana dotyczy konkretnego pliku, podawaj pełny, spójny fragment gotowy do wklejenia.
+- Nie dopisuj komentarzy o historii zmian, poprzednim stanie ani o tym, co było błędne.
+- Opisuj tylko to, co kod robi teraz.
 
-## Styl propozycji zmian — WYMAGANE
-- **Czisty, pełny kod** — nigdy nie używaj `// ... istniejący kod ...` ani innych zaznaczników
-- Jeśli zmiana wymaga wstawienia, opisz WHERE w komentarzu filepath, a cały kod niech będzie spójny
-- **Brak zaznaczników historii**: nie pisz o tym co zostało zmienione, jakie były błędy, co było przed
-- Kod powinien wyglądać jak kompletny, nowy moduł
+## Komentarze w kodzie
+- Każda funkcja ma mieć nagłówek:
+  - co robi,
+  - wejście,
+  - wyjście.
+- Komentuj kroki logiki tam, gdzie występują:
+  - parsowanie danych,
+  - walidacja,
+  - komunikacja z urządzeniem,
+  - warunki ochronne,
+  - operacje na rejestrach,
+  - ograniczenia zakresów.
+- Zachowuj komentarze sekcyjne organizujące plik, np.:
+  - `// === DEKLARACJE FORWARD ===`
+  - `// === PINY ===`
+  - `// === ZAKRESY ID ===`
+  - `// === PROTOKÓŁ ===`
+- Zachowuj komentarze przy grupach stałych, jeśli niosą znaczenie techniczne.
+- Nie komentuj rzeczy oczywistych składniowo.
 
-## Komentarze — WYMAGANE
-- **Każda funkcja**: nagłówek wyjaśniający CO robi, wejście, wyjście
-- **Każdy krok logiki**: okomentuj w pętlach, parsowaniu, warunkach, transformacjach danych
-- **Nie pisz**: 
-  - Oczywistych rzeczy (`i++; // increment i`)
-  - Komentarzy na temat zmian/przeszłości (np. "Stary kod był błędny", "Zmieniono żeby...")
-- **Pisz**: CO kod robi TERAZ — wartości zwracane, warunki, ograniczenia, rejestry, zakresy
-- **Nie kasuj**: komentarzy bez wyraźnej prośby nawet jeśli wydają się oczywiste.
+## Bezpieczeństwo zmian sprzętowych
+- Nie proponuj zmian zwiększających ryzyko niekontrolowanego ruchu serw bez wyraźnej potrzeby.
+- Operacje na EEPROM, ID serw i komendach resetu traktuj jako wrażliwe.
+- Przy zmianach związanych z ruchem, momentem i komunikacją szeregową preferuj walidację wejścia i czytelne logi diagnostyczne.
+- Jeśli zachowanie komendy zależy od modelu serwa lub wersji firmware, zaznacz niepewność zamiast zakładać zgodność.
 
-Przykład DOBRY:
-
-```cpp
-if(sc.Ping(id) != -1) {
-  // Ping zwrócił coś innego niż -1 — serwo odpowiada i jest dostępne
-  foundIDs[servoCount] = id;
-  servoCount++;
-}
-```
-
-Przykład ZŁY:
-
-```cpp
-if(sc.Ping(id) != -1) {
-  // Zmieniono warunek aby poprawnie mapować serwa
-  foundIDs[servoCount] = id;
-  servoCount++;
-}
-```
+## Odpowiedzi i komunikacja
+- Odpowiedzi mają być krótkie, konkretne i praktyczne.
+- Gdy proponowana jest zmiana strukturalna, najpierw podaj krótko powód.
+- Gdy dane techniczne projektu wymagają uporządkowania, aktualizuj `README.md`, a nie ten plik.
