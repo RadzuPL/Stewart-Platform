@@ -294,3 +294,19 @@ Najbardziej logiczne następne kroki:
 4. przygotować warstwę abstrakcji pod sterowanie 6 osiami,
 5. rozpocząć integrację kinematyki.
 
+## Licencja i pochodzenie kinematyki
+
+Część kodu kinematyki została zaczerpnięta z projektu "stewart-platform-esp32" (autor: Nicolas Jeanmonod).
+Pliki kinematyczne użyte w tym repozytorium są objęte licencją GNU General Public License v3 (GPL-3.0).
+
+Zgodnie z GPLv3:
+- Ten projekt (w całości lub w części zawierającej przekopiowaną kinematykę) jest udostępniany na licencji GPLv3.
+- Do repozytorium dołączono plik LICENSE (kopię GNU GPLv3).
+- Zachowano oryginalne nagłówki autorskie w skopiowanych plikach źródłowych.
+- Wszelkie zmiany w stosunku do oryginału są oznaczone i udostępnione pod tą samą licencją.
+
+Oryginalne źródło kinematyki:
+https://github.com/NicHub/stewart-platform-esp32
+
+Jeśli chcesz używać lub rozpowszechniać ten kod, zapoznaj się z treścią GPLv3 — dystrybucja binarna wymaga udostępnienia całego odpowiadającego kodu źródłowego na tych samych warunkach.
+
