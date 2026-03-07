@@ -10,6 +10,6 @@ extern Adafruit_SSD1306 display;
 
 void displayInit();
 void oledShowBoot();
-void updateOLED(int servoCount, int foundIDs[], bool torqueEnabled, SCSCL &sc);
+void updateOLED(int servoCount, int foundIDs[], bool torqueEnabled, int globalSpeed, SCSCL &sc);
 
 #endif

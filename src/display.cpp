@@ -16,26 +16,35 @@ void oledShowBoot() {
   display.display();
 }
 
-void updateOLED(int servoCount, int foundIDs[], bool torqueEnabled, SCSCL &sc) {
+void updateOLED(int servoCount, int foundIDs[], bool torqueEnabled, int globalSpeed, SCSCL &sc) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   
+  // Linia 0: S:6 T:ON Sp:2000
   display.setCursor(0, 0);
-  display.print("S:"); display.print(servoCount); 
-  display.print(" T:"); display.print(torqueEnabled ? "1" : "0");
+  display.print("S:"); display.print(servoCount);
+  display.print(" T:"); display.print(torqueEnabled ? "ON" : "OFF");
+  display.print(" Sp:"); display.print(globalSpeed);
   
+  // Linia 1: #11:277 #12:791 #13:5
   display.setCursor(0, 10);
-  if(servoCount >= 1) {
-    display.print("P1:"); display.print(sc.ReadPos(foundIDs[0]));
-  }
-  if(servoCount >= 2) {
-    display.print(" P2:"); display.print(sc.ReadPos(foundIDs[1]));
+  for(int i = 0; i < 3 && i < servoCount; i++) {
+    int id = foundIDs[i];
+    int pos = sc.ReadPos(id);
+    if(i > 0) display.print(" ");
+    //display.print("#"); 
+    display.print(id); display.print(":"); display.print(pos);
   }
   
+  // Linia 2: #14:786 #15:446 #16:797
   display.setCursor(0, 20);
-  if(servoCount >= 1) {
-    display.print("V:"); display.print(sc.ReadVoltage(foundIDs[0])/10.0);
+  for(int i = 3; i < 6 && i < servoCount; i++) {
+    int id = foundIDs[i];
+    int pos = sc.ReadPos(id);
+    if(i > 3) display.print(" ");
+    //display.print("#"); 
+    display.print(id); display.print(":"); display.print(pos);
   }
   
   display.display();
