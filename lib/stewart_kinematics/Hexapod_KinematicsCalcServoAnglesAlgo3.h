@@ -1,5 +1,5 @@
 /**
- * S T E W A R T    P L A T F O R M    O N    E S P 3 2
+ * S T E W A R T    P L A T F O R M    O N    E S P 3 2
  *
  * Copyright (C) 2019  Nicolas Jeanmonod, ouilogique.com
  *
@@ -19,33 +19,27 @@
  */
 
 /**
- * Calculation of the servo angles in radians, degrees and in microseconds (PWM)
- * given the desired target platform coordinates.
+ * Oblicza kąty serw (radiany, stopnie, pozycja SCS) dla zadanej pozycji platformy.
  *
- * @param coord : the desired target platform coordinates.
- * A struct containing X (surge), Y (sway), Z (heave) in mm
- * and A (roll), B (pitch) and C (yaw) in radians.
+ * Wejście: coord - zadana pozycja platformy (translacje mm, rotacje rad).
+ *          servo_angles - tablica wynikowa kątów serw.
+ * Wyjście: 0 = OK, <0 = błąd (patrz kody poniżej).
  *
- * @param servo_angles : pointer to an array of struct containing
- * the calculated servos angles in radians, degrees and in microseconds (PWM).
- *
- * @return
- * Returns = 0 if OK
- * Returns < 0 if Error
- *
+ * Kody błędów:
+ *  -1: dystans BP przekracza fizyczne maksimum (ARM+ROD).
+ *  -3: pozycja SCS przekracza górny limit serwa.
+ *  -4: pozycja SCS poniżej dolnego limitu serwa.
+ *  -5: wyrażenie pod pierwiastkiem ujemne (geometria nieosiągalna).
  */
 int8_t Hexapod_Kinematics::calcServoAngles(
     platform_t coord,
     angle_t servo_angles[])
 {
-    // Number of times the function was called.
     static uint64_t nb_call = 0;
     ++nb_call;
 
     angle_t new_servo_angles[NB_SERVOS];
 
-    // Intermediate values, to avoid recalculating sin and cos.
-    // (3 µs).
     double
         cosA = cos(coord.hx_a),
         cosB = cos(coord.hx_b),
@@ -54,13 +48,11 @@ int8_t Hexapod_Kinematics::calcServoAngles(
         sinB = sin(coord.hx_b),
         sinC = sin(coord.hx_c);
 
-    // Assume everything will be OK.
     int8_t movOK = 0;
 
     for (uint8_t sid = 0; sid < NB_SERVOS; sid++)
     {
-        // Compute the new platform joint coordinates relative to servo pivot.
-        // (~7 µs)
+        // Pozycja przegubu platformy względem pivota serwa.
         double BP_x = P_COORDS[sid][0] * cosB * cosC +
                       P_COORDS[sid][1] * (sinA * sinB * cosC - cosA * sinC) +
                       coord.hx_x -
@@ -85,15 +77,10 @@ int8_t Hexapod_Kinematics::calcServoAngles(
             c2 = POW(c, 2),
             c4 = POW(c, 4);
 
-        // Distance^2 between servo pivot (B) and platform joint (P).
-        // Note that BP_x^2 + BP_y^2 + BP_z^2 = a^2 + b^2 + c^2, so
-        // we can compare BP2 to BP2_MAX in the next test.
+        // Dystans^2 między pivotem serwa a przegubem platformy.
         double BP2 = a2 + b2 + c2;
 
-        // Test if the new distance between servo pivot and platform joint
-        // is longer than physically possible.
-        // Abort computation of remaining angles if the current angle is not OK.
-        // (~1 µs)
+        // Sprawdź, czy dystans nie przekracza fizycznego maksimum.
         if (BP2 > BP2_MAX)
         {
             movOK = -1;
@@ -113,28 +100,21 @@ int8_t Hexapod_Kinematics::calcServoAngles(
         i1 = (2 * ARM_LENGTH * c - i1) /
              (ARM_LENGTH2 + 2 * ARM_LENGTH * a -
               ROD_LENGTH2 + BP2);
-        i1 = 2 * atan(i1); // ~10 µs
+        i1 = 2 * atan(i1);
         new_servo_angles[sid].rad = i1;
 
-        // Rotate the angle.
-        // (~1 µs)
+        // Obrót kąta o połowę zakresu.
         new_servo_angles[sid].rad += SERVO_HALF_ANGULAR_RANGE;
 
-        // Convert radians to degrees.
-        // (~2 µs)
+        // Konwersja radiany → stopnie.
         new_servo_angles[sid].deg = degrees(new_servo_angles[sid].rad);
 
-        // Convert radians to PWM.
-        // The calibration values take into account the fact
-        // that the odd and even arms are a reflection of each other.
-        // (~5 µs)
+        // Konwersja radiany → pozycja SCS z uwzględnieniem kalibracji i inwersji.
         new_servo_angles[sid].pwm_us =
-            round(SERVO_CALIBRATION[sid].gain * new_servo_angles[sid].rad) +
-            SERVO_CALIBRATION[sid].offset;
+            round(SERVO_IK_CALIBRATION[sid].gain * new_servo_angles[sid].rad) +
+            SERVO_IK_CALIBRATION[sid].offset;
 
-        // Check if the angle is in per-servo min/max.
-        // Abort computation of remaining angles if the current angle is not OK.
-        // (~1 µs)
+        // Walidacja pozycji SCS względem limitów per serwo.
         if (new_servo_angles[sid].pwm_us > SERVO_PWM_UPPER_LIMIT[sid])
         {
             movOK = -3;
@@ -145,22 +125,9 @@ int8_t Hexapod_Kinematics::calcServoAngles(
             movOK = -4;
             break;
         }
-
-#if false
-        // Calculate Z_HOME so that the arm is horizontal.
-        // The result is valid only for the home position
-        // (first line of table calculated by desktop app).
-        double Z_HOME_CALC =
-            BP_z - sqrt(POW(ROD_LENGTH, 2) -
-                        POW((ARM_LENGTH - (COS_THETA_S[sid] * BP_x + SIN_THETA_S[sid] * BP_y)), 2) -
-                        POW((-SIN_THETA_S[sid] * BP_x + COS_THETA_S[sid] * BP_y), 2));
-        Z_HOME_CALC += Z_HOME;
-        new_servo_angles[sid].debug = Z_HOME_CALC;
-#endif
     }
 
-    // Update platform coordinates if there are no errors.
-    // (~1 µs)
+    // Zapisz wynikowe kąty tylko gdy wszystkie obliczenia poprawne.
     if (movOK == 0)
     {
         for (uint8_t sid = 0; sid < NB_SERVOS; sid++)

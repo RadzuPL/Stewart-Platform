@@ -4,13 +4,8 @@
 #include <math.h>
 
 // === STAN TESTÓW RUCHU ===
-// Arm wymagany do wykonania ruchu, aby ograniczyć ryzyko przypadkowego startu.
 static bool gMotionArmed = false;
-
-// Dry-run pozwala zweryfikować obliczone cele bez wysyłki do serw.
 static bool gMotionDryRun = true;
-
-// Instancja silnika kinematyki odwrotnej.
 static Hexapod_Kinematics gIK;
 
 /**
@@ -74,24 +69,20 @@ static bool isPoseInsideLimits(const Pose6D &pose) {
 }
 
 /**
- * Konwertuje wynik IK (pwm_us — pozycja 0..1023) na bezpieczną pozycję SCS
- * z uwzględnieniem clampowania do zakresów kalibracyjnych.
- * Wejście: index - indeks serwa 0..5, ikPosition - pozycja obliczona przez IK.
- * Wyjście: pozycja SCS przycięta do bezpiecznego zakresu.
+ * Konwertuje wynik IK na bezpieczną pozycję SCS z clampowaniem.
+ * Wejście: index - indeks serwa 0..5, ikPosition - pozycja z IK.
+ * Wyjście: pozycja SCS przycięta do zakresu kalibracyjnego.
  */
 static int ikPositionToSCS(int index, int ikPosition) {
   return clampServoPositionByIndex(index, ikPosition);
 }
 
 /**
- * Oblicza cele serw dla pozycji platformy z użyciem biblioteki IK.
+ * Oblicza cele serw dla pozycji platformy z użyciem IK.
  * Wejście: pose - zadanie 6DoF (mm i stopnie).
  * Wyjście: true gdy outPos[6] wypełnione poprawnymi pozycjami SCS.
- *
- * Konwersja: Pose6D (stopnie) → platform_t (radiany) → IK → pwm_us (pozycja SCS).
  */
 static bool computeServoTargetsFromPose(const Pose6D &pose, int outPos[6]) {
-  // Utwórz strukturę wejściową IK: translacje w mm, rotacje w radianach.
   platform_t coord;
   coord.hx_x = pose.xMm;
   coord.hx_y = pose.yMm;
@@ -100,7 +91,6 @@ static bool computeServoTargetsFromPose(const Pose6D &pose, int outPos[6]) {
   coord.hx_b = radians(pose.pitchDeg);
   coord.hx_c = radians(pose.yawDeg);
 
-  // Oblicz kąty serw za pomocą kinematyki odwrotnej.
   angle_t servo_angles[NB_SERVOS];
   int8_t result = gIK.calcServoAngles(coord, servo_angles);
 
@@ -110,8 +100,7 @@ static bool computeServoTargetsFromPose(const Pose6D &pose, int outPos[6]) {
     return false;
   }
 
-  // Konwertuj wynik IK (pwm_us) na pozycje SCS z clampowaniem.
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < NB_SERVOS; i++) {
     int rawPos = (int)servo_angles[i].pwm_us;
 
     Serial.print("[MOTION] IK servo[");
@@ -133,12 +122,12 @@ static bool computeServoTargetsFromPose(const Pose6D &pose, int outPos[6]) {
 }
 
 /**
- * Wysyła cele do serw z uwzględnieniem dry-run i ograniczeń min/max.
+ * Wysyła cele do serw z uwzględnieniem dry-run i clampowania.
  * Wejście: targets[6] - cele pozycji, sc - interfejs serw, globalSpeed - prędkość.
  * Wyjście: true gdy operacja zakończona.
  */
 static bool sendTargetsToServos(const int targets[6], SCSCL &sc, int globalSpeed) {
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < NB_SERVOS; i++) {
     int servoID = gServoCalibration[i].id;
     int safePos = clampServoPositionByIndex(i, targets[i]);
 
@@ -162,27 +151,26 @@ static bool sendTargetsToServos(const int targets[6], SCSCL &sc, int globalSpeed
 }
 
 /**
- * Wykonuje ruch do pozycji home z kalibracji.
+ * Wykonuje ruch do pozycji HOME z kalibracji.
  * Wejście: sc - interfejs serw, globalSpeed - prędkość.
  * Wyjście: true gdy komenda wykonana.
  */
 static bool moveHome(SCSCL &sc, int globalSpeed) {
-  int targets[6];
-  for (int i = 0; i < 6; i++) {
+  int targets[NB_SERVOS];
+  for (int i = 0; i < NB_SERVOS; i++) {
     targets[i] = gServoCalibration[i].homePos;
   }
   return sendTargetsToServos(targets, sc, globalSpeed);
 }
 
 /**
- * Parsuje i wykonuje bezpieczny test bezpośrednich pozycji serw:
- * MT11:512,12:512,13:512,14:512,15:512,16:512
+ * Parsuje i wykonuje bezpośredni test pozycji serw: MT11:512,12:512,...
  * Wejście: params - tekst po "MT", sc - interfejs serw, globalSpeed - prędkość.
  * Wyjście: true gdy komenda wykonana.
  */
 static bool handleDirectServoTest(const String &params, SCSCL &sc, int globalSpeed) {
-  int targets[6];
-  for (int i = 0; i < 6; i++) {
+  int targets[NB_SERVOS];
+  for (int i = 0; i < NB_SERVOS; i++) {
     targets[i] = gServoCalibration[i].homePos;
   }
 
@@ -237,22 +225,30 @@ static void printMotionStatus(bool torqueEnabled) {
   Serial.print("Geometry: "); Serial.println(isPlatformGeometryReady() ? "READY" : "NOT READY");
   Serial.print("Calibration: "); Serial.println(areServoCalibrationsReady() ? "READY" : "NOT READY");
 
-  Serial.print("Limits X/Y/Z [mm]: ");
+  Serial.println("--- Geometry ---");
+  Serial.print("ARM="); Serial.print(ARM_LENGTH);
+  Serial.print(" ROD="); Serial.print(ROD_LENGTH);
+  Serial.print(" Z_HOME="); Serial.println(Z_HOME);
+  Serial.print("B_RAD="); Serial.print(B_RAD);
+  Serial.print(" P_RAD="); Serial.println(P_RAD);
+
+  Serial.println("--- Motion Limits ---");
+  Serial.print("X/Y/Z [mm]: ");
   Serial.print(gMotionLimits.xMaxMm); Serial.print(" / ");
   Serial.print(gMotionLimits.yMaxMm); Serial.print(" / ");
   Serial.println(gMotionLimits.zMaxMm);
 
-  Serial.print("Limits R/P/Y [deg]: ");
+  Serial.print("R/P/Y [deg]: ");
   Serial.print(gMotionLimits.rollMaxDeg); Serial.print(" / ");
   Serial.print(gMotionLimits.pitchMaxDeg); Serial.print(" / ");
   Serial.println(gMotionLimits.yawMaxDeg);
 
-  // Wypisz konfigurację kalibracyjną serw.
-  Serial.println("Servo calibration:");
-  for (int i = 0; i < 6; i++) {
+  Serial.println("--- Servo Calibration ---");
+  for (int i = 0; i < NB_SERVOS; i++) {
     Serial.print("  ["); Serial.print(i); Serial.print("] ID=");
     Serial.print(gServoCalibration[i].id);
     Serial.print(" inv="); Serial.print(gServoCalibration[i].inverted ? "Y" : "N");
+    Serial.print(" off="); Serial.print(gServoCalibration[i].offset);
     Serial.print(" home="); Serial.print(gServoCalibration[i].homePos);
     Serial.print(" min="); Serial.print(gServoCalibration[i].minPos);
     Serial.print(" max="); Serial.println(gServoCalibration[i].maxPos);
@@ -358,7 +354,6 @@ bool handleMotionCommand(const String &params, SCSCL &sc, int globalSpeed, bool 
     return ok;
   }
 
-  // Parsuj komendę 6DoF: M<x>,<y>,<z>,<roll>,<pitch>,<yaw>
   Pose6D pose;
   if (!parsePose6D(p, pose)) {
     Serial.println("[MOTION] ERR format: Mx,y,z,roll,pitch,yaw");
@@ -377,11 +372,10 @@ bool handleMotionCommand(const String &params, SCSCL &sc, int globalSpeed, bool 
     return false;
   }
 
-  // Oblicz pozycje serw za pomocą kinematyki odwrotnej.
-  int targets[6];
+  int targets[NB_SERVOS];
   if (!computeServoTargetsFromPose(pose, targets)) {
-    // Diagnostyka geometrii — uruchom raz z M0,0,0,0,0,0 żeby sprawdzić BP2
-    Serial.print("[IK_DBG] BP2_MAX="); Serial.println((ARM_LENGTH+ROD_LENGTH)*(ARM_LENGTH+ROD_LENGTH));
+    Serial.print("[IK_DBG] BP2_MAX=");
+    Serial.println((ARM_LENGTH + ROD_LENGTH) * (ARM_LENGTH + ROD_LENGTH));
     Serial.println("[MOTION] ERR IK failed (pose unreachable or geometry error)");
     return false;
   }
