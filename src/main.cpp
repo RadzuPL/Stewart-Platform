@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include "display.h"
 #include "leds.h"
+#include "motion.h"
 
 // === DEKLARACJE FORWARD ===
 void processCommand(String cmd);
@@ -68,6 +69,7 @@ int globalSpeed = 2000;
 #define CMD_RESET   'Z'   // Próba resetu fabrycznego serwa.
 #define CMD_SETID   'I'   // Zmiana ID serwa przez zapis do EEPROM.
 #define CMD_DIAG    'D'   // Diagnostyka jednego lub wszystkich serw.
+#define CMD_MOVE6   'M'   // Ruch platformy: x,y,z,roll,pitch,yaw.
 
 /**
  * Inicjalizacja mikrokontrolera, UART, I2C, OLED, LED i serw.
@@ -88,9 +90,12 @@ void setup() {
   displayInit();
   ledsInit();
 
+  // Inicjalizuj moduł ruchu (arm/dry-run).
+  motionInit();
+
   // Wyświetl komunikat startowy na porcie debug i na OLED.
-  Serial.println("=== SERVO CONTROLLER v2.1 ===");
-  Serial.println("Commands: T0/1 S<speed> P<id:pos> R D[<id>] Z<id> I<old:new> H");
+  Serial.println("=== SERVO CONTROLLER v2.2 ===");
+  Serial.println("Commands: T0/1 S<speed> P<id:pos> M(motion) R D[<id>] Z<id> I<old:new> H");
   oledShowBoot();
 
   // Wykryj serwa obecne na magistrali.
@@ -137,7 +142,7 @@ void loop() {
 
 /**
  * Parsuje i wykonuje komendę tekstową.
- * Wejście: cmd - pełna komenda, np. "T1", "P11:512", "D", "D11".
+ * Wejście: cmd - pełna komenda, np. "T1", "P11:512", "D", "D11", "M0,0,5,0,0,0".
  * Wyjście: brak (odpowiedź przez Serial i akcja sprzętowa).
  */
 void processCommand(String cmd) {
@@ -196,6 +201,12 @@ void processCommand(String cmd) {
       Serial.println();
       break;
 
+    case CMD_MOVE6:
+      // M<subcommand>: obsługa komend ruchu platformy.
+      // Delegowane do modułu motion.
+      handleMotionCommand(params, sc, globalSpeed, torqueEnabled);
+      break;
+
     case CMD_RESET:
       // Z<id>: wykonaj diagnostyczną próbę resetu fabrycznego serwa.
       // Zachowanie zależy od firmware modelu SCS225 i nie jest pewne.
@@ -227,6 +238,7 @@ void processCommand(String cmd) {
       Serial.println("T0/1       - Torque OFF/ON");
       Serial.println("S<speed>   - Set speed (50-4000)");
       Serial.println("P<id:pos>  - Move servo (P11:512,12:100)");
+      Serial.println("M          - Motion commands (M? for help)");
       Serial.println("R          - Scan servos (1,11..16)");
       Serial.println("D          - Diagnostic all found servos");
       Serial.println("D<id>      - Diagnostic one servo (D11)");
@@ -301,7 +313,7 @@ void parsePositions(String cmd) {
   int pairCount = 0;
 
   // Przetwarzaj kolejne segmenty aż do końca tekstu.
-  while(commaPos < cmd.length()) {
+  while(commaPos < (int)cmd.length()) {
     // Znajdź koniec bieżącej pary oddzielonej przecinkiem.
     int nextComma = cmd.indexOf(',', commaPos);
     if(nextComma == -1) {

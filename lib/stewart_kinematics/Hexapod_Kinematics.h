@@ -1,5 +1,5 @@
 /**
- * S T E W A R T    P L A T F O R M    O N    E S P 3 2
+ * S T E W A R T    P L A T F O R M    O N    E S P 3 2
  *
  * Copyright (C) 2019  Nicolas Jeanmonod, ouilogique.com
  *
@@ -28,7 +28,7 @@
 #endif
 
 // Choose configuration file.
-#define HEXAPOD_CONFIG 1
+#define HEXAPOD_CONFIG 2
 
 #if HEXAPOD_CONFIG == 1
 #include "Hexapod_Config_1.h"

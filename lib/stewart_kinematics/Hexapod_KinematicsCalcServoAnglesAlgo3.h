@@ -132,15 +132,15 @@ int8_t Hexapod_Kinematics::calcServoAngles(
             round(SERVO_CALIBRATION[sid].gain * new_servo_angles[sid].rad) +
             SERVO_CALIBRATION[sid].offset;
 
-        // Check if the angle is in min/max.
+        // Check if the angle is in per-servo min/max.
         // Abort computation of remaining angles if the current angle is not OK.
-        // (~1 µs)
-        if (new_servo_angles[sid].pwm_us > SERVO_MAX_PWM)
+        // (~1 µs)
+        if (new_servo_angles[sid].pwm_us > SERVO_PWM_UPPER_LIMIT[sid])
         {
             movOK = -3;
             break;
         }
-        else if (new_servo_angles[sid].pwm_us < SERVO_MIN_PWM)
+        else if (new_servo_angles[sid].pwm_us < SERVO_PWM_LOWER_LIMIT[sid])
         {
             movOK = -4;
             break;
